@@ -1,59 +1,88 @@
 -- vape v4 project by Owner
--- Watermark Module (Safe Fix)
+-- Watermark Module (Auto Environment Detect & Asset Fix)
 
 local hud = {}
 
--- Helper function to fetch and cache external image safely
+-- 画像をダウンロード、またはRoblox公式アセットをフォールバックとして取得する関数
 local function getAsset(fileName, imageUrl)
-    -- Check if writefile and isfile exist
-    if not writefile or not isfile then return nil end
-    
-    if not isfile(fileName) then
-        local success, rawData = pcall(function()
-            return game:HttpGet(imageUrl)
-        end)
+    -- 1. エクスプロイト（Executor）環境向けのファイル操作
+    if writefile and isfile then
+        if not isfile(fileName) then
+            local success, rawData = pcall(function()
+                return game:HttpGet(imageUrl)
+            end)
+            
+            if success and rawData and not rawData:find("404: Not Found") then
+                writefile(fileName, rawData)
+            end
+        end
         
-        if success and rawData and not rawData:find("404: Not Found") then
-            writefile(fileName, rawData)
-        else
-            return nil
+        -- 保存したファイルをアセットに変換
+        if isfile(fileName) then
+            local customAsset = nil
+            pcall(function()
+                if getcustomasset then
+                    customAsset = getcustomasset(fileName)
+                elseif get_custom_asset then
+                    customAsset = get_custom_asset(fileName)
+                end
+            end)
+            if customAsset then
+                return customAsset
+            end
         end
     end
     
-    -- Xeno custom asset support with safety pcall
-    local customAsset = nil
-    pcall(function()
-        if getcustomasset then
-            customAsset = getcustomasset(fileName)
-        elseif get_custom_asset then
-            customAsset = get_custom_asset(fileName)
-        end
-     pcall(function()
-        if getcustomasset then
-            customAsset = getcustomasset(fileName)
-        elseif get_custom_asset then
-            customAsset = get_custom_asset(fileName)
-        end
-    end)
-    
-    return customAsset
+    -- 2. エクスプロイトが無い場合、またはダウンロードに失敗した場合は
+    -- Roblox公式にアップロードされているVape v4ロゴのアセットIDをフォールバックとして使用します
+    return "rbxassetid://13350877564"
 end
 
 function hud:CreateWatermark()
-    -- すでに同じGUIがあったら削除して重複を防ぐ
-    if game:GetService("CoreGui"):FindFirstChild("VapeV4_Watermark") then
-        game:GetService("CoreGui")["VapeV4_Watermark"]:Destroy()
+    -- 実行環境に応じてGUIの親を自動判別 (CoreGui または PlayerGui)
+    local targetParent = nil
+    
+    local coreGuiSuccess, coreGui = pcall(function()
+        return game:GetService("CoreGui")
+    end)
+    
+    -- 通常のLocalScriptやStudioではCoreGuiの編集権限がないためPlayerGuiにする
+    if coreGuiSuccess and coreGui and not game:GetService("RunService"):IsStudio() then
+        pcall(function()
+            -- CoreGuiへの書き込み権限テスト
+            local test = Instance.new("Folder")
+            test.Parent = coreGui
+            test:Destroy()
+            targetParent = coreGui
+        end)
+    end
+    
+    if not targetParent then
+        local lp = game:GetService("Players").LocalPlayer
+        if lp then
+            targetParent = lp:WaitForChild("PlayerGui")
+        end
+    end
+    
+    if not targetParent then
+        warn("VapeWatermark: 表示先（PlayerGui/CoreGui）が見つかりませんでした。")
+        return
+    end
+
+    -- 重複防止のため、既存の同じウォーターマークがあれば削除
+    if targetParent:FindFirstChild("VapeV4_Watermark") then
+        targetParent["VapeV4_Watermark"]:Destroy()
     end
 
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "VapeV4_Watermark"
-    ScreenGui.Parent = game:GetService("CoreGui")
+    ScreenGui.Parent = targetParent
     ScreenGui.ResetOnSpawn = false
 
     -- Main Frame (OLED Black)
     local Frame = Instance.new("Frame")
     Frame.Name = "WatermarkFrame"
-    Frame.Size = UDim2.new(0, 140, 0, 30) -- 画像がない場合でも崩れないサイズ
+    Frame.Size = UDim2.new(0, 160, 0, 30) -- 初期サイズ
     Frame.Position = UDim2.new(0, 10, 0, 10)
     Frame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
     Frame.BorderSizePixel = 1
@@ -67,16 +96,18 @@ function hud:CreateWatermark()
     Logo.Position = UDim2.new(0, 6, 0, 5)
     Logo.BackgroundTransparency = 1
     
-    -- Correct Github Raw URL for your repository
-    local logoUrl = "https://raw.githubusercontent.com/BGHackers/vaperewrite/refs/heads/main/assets/logo.png"
+    -- ロゴ画像の取得
+    local logoUrl = "https://raw.githubusercontent.com/BGHackers/vaperewrite/main/assets/logo.png"
     local assetId = getAsset("vape_logo.png", logoUrl)
     
     local textOffset = 8
     if assetId then
         Logo.Image = assetId
         Logo.Parent = Frame
-        textOffset = 32
-        Frame.Size = UDim2.new(0, 160, 0, 30) -- 画像がある場合は横幅を広げる
+        textOffset = 32 -- ロゴがある場合はテキストを右にずらす
+    else
+        -- 画像が一切取得できなかった場合
+        Frame.Size = UDim2.new(0, 130, 0, 30)
     end
 
     -- Text Label
