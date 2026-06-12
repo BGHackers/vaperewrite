@@ -2,7 +2,7 @@ local vape = {}
 vape.version = "beta"
 
 local TARGET_PLACE_ID = 71480482338212
-local BASE_URL = "https://raw.githubusercontent.com/BGHackers/vapev4-rewrite/main/"
+local BASE_URL = "https://raw.githubusercontent.com/BGHackers/vaperewrite/refs/heads/main/"
 
 function vape:Init()
     if game.PlaceId ~= TARGET_PLACE_ID then 
